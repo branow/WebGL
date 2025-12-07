@@ -8,6 +8,13 @@ let spaceball;
 let lightAngle = 0;
 let animationId = null;
 
+// Textures
+let diffuseTexture;
+let specularTexture;
+let normalTexture;
+let whiteTexture;
+let flatNormalTexture;
+
 function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
@@ -69,6 +76,9 @@ function ShaderProgram(name, program) {
     this.prog = program;
     this.iAttribVertex = -1;
     this.iAttribNormal = -1;
+    this.iAttribTexCoord = -1;
+    this.iAttribTangent = -1;
+    this.iAttribBitangent = -1;
     this.iModelViewProjectionMatrix = -1;
     this.iModelViewMatrix = -1;
     this.iNormalMatrix = -1;
@@ -77,6 +87,9 @@ function ShaderProgram(name, program) {
     this.iDiffuseColor = -1;
     this.iSpecularColor = -1;
     this.iShininess = -1;
+    this.iDiffuseMap = -1;
+    this.iSpecularMap = -1;
+    this.iNormalMap = -1;
 
     this.Use = function() {
         gl.useProgram(this.prog);
@@ -85,7 +98,8 @@ function ShaderProgram(name, program) {
 
 
 function draw() {
-    gl.clearColor(0,0,0,1);
+    // Light gray background instead of black
+    gl.clearColor(0.5, 0.5, 0.5, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     let projection = m4.perspective(Math.PI/8, 1, 8, 12);
@@ -106,7 +120,7 @@ function draw() {
     const lightRadius = 1.5;
     const lightWorldX = lightRadius * Math.cos(lightAngle);
     const lightWorldY = lightRadius * Math.sin(lightAngle);
-    const lightWorldZ = 1.2;
+    const lightWorldZ = 3;
 
     let lightWorldPos = [lightWorldX, lightWorldY, lightWorldZ, 1.0];
     let lightViewPos = m4.transformVector(matAccum1_noScale, lightWorldPos);
@@ -116,31 +130,29 @@ function draw() {
     gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, normalMatrix);
 
     gl.uniform3fv(shProgram.iLightPosition, [lightViewPos[0], lightViewPos[1], lightViewPos[2]]);
-    gl.uniform3fv(shProgram.iAmbientColor, [0.3, 0.3, 0.0]);
-    gl.uniform3fv(shProgram.iDiffuseColor, [0.2, 0.2, 0.0]);
-    gl.uniform3fv(shProgram.iSpecularColor, [0.8, 0.8, 0.2]);
-    gl.uniform1f(shProgram.iShininess, 3.0);
+    // Use neutral colors to let textures define the appearance
+    // Increased lighting for better visibility of blue texture
+    gl.uniform3fv(shProgram.iAmbientColor, [0.6, 0.6, 0.6]);
+    gl.uniform3fv(shProgram.iDiffuseColor, [1.5, 1.5, 1.5]);
+    gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
+    gl.uniform1f(shProgram.iShininess, 16.0);
+
+    // Bind textures
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, diffuseTexture);
+    gl.uniform1i(shProgram.iDiffuseMap, 0);
+
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, specularTexture);
+    gl.uniform1i(shProgram.iSpecularMap, 1);
+
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, normalTexture);
+    gl.uniform1i(shProgram.iNormalMap, 2);
 
     surface.Draw();
 
-    gl.disable(gl.DEPTH_TEST);
-
-    let lightTranslation = m4.translation(lightWorldX, lightWorldY, lightWorldZ);
-    let lightModelView = m4.multiply(matAccum1_noScale, lightTranslation);
-    let lightMVP = m4.multiply(projection, lightModelView);
-    let lightNormalMatrix = m4.transpose(m4.inverse(lightModelView));
-
-    gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, lightMVP);
-    gl.uniformMatrix4fv(shProgram.iModelViewMatrix, false, lightModelView);
-    gl.uniformMatrix4fv(shProgram.iNormalMatrix, false, lightNormalMatrix);
-
-    gl.uniform3fv(shProgram.iAmbientColor, [1.0, 1.0, 1.0]);
-    gl.uniform3fv(shProgram.iDiffuseColor, [1.0, 1.0, 1.0]);
-    gl.uniform3fv(shProgram.iSpecularColor, [1.0, 1.0, 1.0]);
-    gl.uniform1f(shProgram.iShininess, 10.0);
-
-    lightSphere.Draw();
-    gl.enable(gl.DEPTH_TEST);
+    // Light sphere drawing removed - light still moves and affects the surface
 }
 
 function animate() {
@@ -200,6 +212,54 @@ function CreateSphereData(radius, latitudeBands, longitudeBands) {
     return { vertices, normals, indices };
 }
 
+function loadTexture(url, callback) {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+
+    // Create a 1x1 placeholder pixel for immediate rendering
+    const pixel = new Uint8Array([128, 128, 255, 255]); // Light blue for normal map default
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+
+    const image = new Image();
+    image.onload = function() {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+        // Set texture parameters
+        if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        } else {
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        }
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        if (callback) callback();
+    };
+    image.onerror = function() {
+        console.error('Failed to load texture: ' + url);
+    };
+    image.src = url;
+
+    return texture;
+}
+
+function isPowerOf2(value) {
+    return (value & (value - 1)) === 0;
+}
+
+function createSolidTexture(r, g, b, a) {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    const pixel = new Uint8Array([r, g, b, a]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    return texture;
+}
+
 
 function initGL() {
     let prog = createProgram(gl, vertexShaderSource, fragmentShaderSource);
@@ -209,6 +269,9 @@ function initGL() {
 
     shProgram.iAttribVertex = gl.getAttribLocation(prog, "vertex");
     shProgram.iAttribNormal = gl.getAttribLocation(prog, "normal");
+    shProgram.iAttribTexCoord = gl.getAttribLocation(prog, "texCoord");
+    shProgram.iAttribTangent = gl.getAttribLocation(prog, "tangent");
+    shProgram.iAttribBitangent = gl.getAttribLocation(prog, "bitangent");
     shProgram.iModelViewProjectionMatrix = gl.getUniformLocation(prog, "ModelViewProjectionMatrix");
     shProgram.iModelViewMatrix = gl.getUniformLocation(prog, "ModelViewMatrix");
     shProgram.iNormalMatrix = gl.getUniformLocation(prog, "NormalMatrix");
@@ -217,12 +280,24 @@ function initGL() {
     shProgram.iDiffuseColor = gl.getUniformLocation(prog, "diffuseColor");
     shProgram.iSpecularColor = gl.getUniformLocation(prog, "specularColor");
     shProgram.iShininess = gl.getUniformLocation(prog, "shininess");
+    shProgram.iDiffuseMap = gl.getUniformLocation(prog, "diffuseMap");
+    shProgram.iSpecularMap = gl.getUniformLocation(prog, "specularMap");
+    shProgram.iNormalMap = gl.getUniformLocation(prog, "normalMap");
 
     surface = new Lab1Model('Surface');
     surface.BufferData();
 
     lightSphere = new SphereModel('LightSphere');
     lightSphere.BufferData(0.1, 16, 16);
+
+    // Load textures for the surface
+    diffuseTexture = loadTexture('textures/diffuse.jpg', draw);
+    specularTexture = loadTexture('textures/specular.jpg', draw);
+    normalTexture = loadTexture('textures/normal.jpg', draw);
+
+    // Create solid textures for the light sphere
+    whiteTexture = createSolidTexture(255, 255, 255, 255); // White
+    flatNormalTexture = createSolidTexture(128, 128, 255, 255); // Flat normal (pointing outward)
 
     gl.enable(gl.DEPTH_TEST);
 }

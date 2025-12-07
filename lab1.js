@@ -10,6 +10,9 @@ class Lab1Model{
     this.name = name;
     this.iVertexBuffer = gl.createBuffer();
     this.iNormalBuffer = gl.createBuffer();
+    this.iUVBuffer = gl.createBuffer();
+    this.iTangentBuffer = gl.createBuffer();
+    this.iBitangentBuffer = gl.createBuffer();
     this.iIndexBuffer = gl.createBuffer();
     this.count = 0;
     this.rSteps = 10;
@@ -20,13 +23,22 @@ class Lab1Model{
     if (rSteps !== undefined) this.rSteps = rSteps;
     if (uSteps !== undefined) this.uSteps = uSteps;
 
-    const { vertices, normals, edges } = Lab1CreateSurfaceData(this.rSteps, this.uSteps);
+    const { vertices, normals, uvs, tangents, bitangents, edges } = Lab1CreateSurfaceData(this.rSteps, this.uSteps);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.iVertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STREAM_DRAW);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.iNormalBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STREAM_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iUVBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uvs), gl.STREAM_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iTangentBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(tangents), gl.STREAM_DRAW);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iBitangentBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(bitangents), gl.STREAM_DRAW);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.iIndexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(edges), gl.STATIC_DRAW);
@@ -42,6 +54,18 @@ class Lab1Model{
     gl.vertexAttribPointer(shProgram.iAttribNormal, 3, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(shProgram.iAttribNormal);
 
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iUVBuffer);
+    gl.vertexAttribPointer(shProgram.iAttribTexCoord, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(shProgram.iAttribTexCoord);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iTangentBuffer);
+    gl.vertexAttribPointer(shProgram.iAttribTangent, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(shProgram.iAttribTangent);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.iBitangentBuffer);
+    gl.vertexAttribPointer(shProgram.iAttribBitangent, 3, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(shProgram.iAttribBitangent);
+
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.iIndexBuffer);
     gl.drawElements(gl.TRIANGLES, this.count, gl.UNSIGNED_SHORT, 0);
   }
@@ -54,6 +78,9 @@ function Lab1CreateSurfaceData(rSteps, uSteps) {
   return {
     vertices: GenerateSurfaceVertices(rSteps, uSteps, rRange, uRange),
     normals: GenerateSurfaceNormals(rSteps, uSteps, rRange, uRange),
+    uvs: GenerateSurfaceUVs(rSteps, uSteps),
+    tangents: GenerateSurfaceTangents(rSteps, uSteps, rRange, uRange),
+    bitangents: GenerateSurfaceBitangents(rSteps, uSteps, rRange, uRange),
     edges: GenerateSurfaceEdges(rSteps, uSteps)
   }
 }
@@ -71,6 +98,66 @@ function GenerateSurfaceVertices(rSteps, uSteps, rRange, uRange) {
   }
 
   return new Float32Array(vertices);
+}
+
+function GenerateSurfaceUVs(rSteps, uSteps) {
+  const uvs = [];
+
+  for (let i = 0; i <= rSteps; ++i) {
+    const v = i / rSteps; // Radial coordinate normalized to [0, 1]
+    for (let j = 0; j <= uSteps; ++j) {
+      const u = j / uSteps; // Angular coordinate normalized to [0, 1]
+      uvs.push(u, v);
+    }
+  }
+
+  return new Float32Array(uvs);
+}
+
+function GenerateSurfaceTangents(rSteps, uSteps, rRange, uRange) {
+  const tangents = [];
+
+  for (let i = 0; i <= rSteps; ++i) {
+    const r = rRange.min + (rRange.max - rRange.min) * (i / rSteps);
+    for (let j = 0; j <= uSteps; ++j) {
+      const u = uRange.min + (uRange.max - uRange.min) * (j / uSteps);
+      const tangent = SurfaceTangent(r, u);
+      const normalized = Normalize(tangent);
+      tangents.push(normalized.x, normalized.y, normalized.z);
+    }
+  }
+
+  return new Float32Array(tangents);
+}
+
+function GenerateSurfaceBitangents(rSteps, uSteps, rRange, uRange) {
+  const bitangents = [];
+
+  for (let i = 0; i <= rSteps; ++i) {
+    const r = rRange.min + (rRange.max - rRange.min) * (i / rSteps);
+    for (let j = 0; j <= uSteps; ++j) {
+      const u = uRange.min + (uRange.max - uRange.min) * (j / uSteps);
+
+      // Get tangent and bitangent
+      const T = SurfaceTangent(r, u);
+      const B = SurfaceBitangent(r, u);
+
+      // Gram-Schmidt orthogonalization with TANGENT PRIORITY
+      // Step 1: Normalize tangent (tangent has priority, keep as-is)
+      const T_ortho = Normalize(T);
+
+      // Step 2: Orthogonalize bitangent with respect to tangent
+      // B' = B - (B·T)T
+      const dotBT = Dot(B, T_ortho);
+      const projection = { x: T_ortho.x * dotBT, y: T_ortho.y * dotBT, z: T_ortho.z * dotBT };
+      const B_ortho = Subtract(B, projection);
+      const B_normalized = Normalize(B_ortho);
+
+      bitangents.push(B_normalized.x, B_normalized.y, B_normalized.z);
+    }
+  }
+
+  return new Float32Array(bitangents);
 }
 
 function GenerateSurfaceEdges(rSteps, uSteps) {
@@ -100,6 +187,32 @@ function SurfacePoint(r, u) {
   const x = r * Math.cos(u);
   const y = r * Math.sin(u);
   const z = a * Math.exp(-n * r) * Math.sin(w * r + f);
+  return { x, y, z };
+}
+
+function SurfaceTangent(r, u) {
+  // Tangent vector: ∂P/∂u (derivative with respect to angular parameter)
+  // x = r*cos(u) -> ∂x/∂u = -r*sin(u)
+  // y = r*sin(u) -> ∂y/∂u = r*cos(u)
+  // z = a*e^(-n*r)*sin(w*r+f) -> ∂z/∂u = 0
+  const x = -r * Math.sin(u);
+  const y = r * Math.cos(u);
+  const z = 0;
+  return { x, y, z };
+}
+
+function SurfaceBitangent(r, u) {
+  // Bitangent vector: ∂P/∂r (derivative with respect to radial parameter)
+  // x = r*cos(u) -> ∂x/∂r = cos(u)
+  // y = r*sin(u) -> ∂y/∂r = sin(u)
+  // z = a*e^(-n*r)*sin(w*r+f) -> ∂z/∂r = a*e^(-n*r)*[-n*sin(w*r+f) + w*cos(w*r+f)]
+  const expTerm = Math.exp(-n * r);
+  const sinTerm = Math.sin(w * r + f);
+  const cosTerm = Math.cos(w * r + f);
+
+  const x = Math.cos(u);
+  const y = Math.sin(u);
+  const z = a * expTerm * (-n * sinTerm + w * cosTerm);
   return { x, y, z };
 }
 

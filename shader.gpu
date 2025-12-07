@@ -4,22 +4,36 @@
 const vertexShaderSource = `
 attribute vec3 vertex;
 attribute vec3 normal;
+attribute vec2 texCoord;
+attribute vec3 tangent;
+attribute vec3 bitangent;
+
 uniform mat4 ModelViewProjectionMatrix;
 uniform mat4 ModelViewMatrix;
 uniform mat4 NormalMatrix;
 
 varying vec3 vNormal;
 varying vec3 vPosition;
+varying vec2 vTexCoord;
+varying vec3 vTangent;
+varying vec3 vBitangent;
 
 void main() {
     vec4 position = ModelViewMatrix * vec4(vertex, 1.0);
     vPosition = position.xyz;
+
+    // Transform normal, tangent, and bitangent to view space
     vNormal = normalize((NormalMatrix * vec4(normal, 0.0)).xyz);
+    vTangent = normalize((NormalMatrix * vec4(tangent, 0.0)).xyz);
+    vBitangent = normalize((NormalMatrix * vec4(bitangent, 0.0)).xyz);
+
+    vTexCoord = texCoord;
+
     gl_Position = ModelViewProjectionMatrix * vec4(vertex, 1.0);
 }`;
 
 
-// Fragment shader - Phong Shading
+// Fragment shader - Phong Shading with Texture Mapping
 const fragmentShaderSource = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
    precision highp float;
@@ -29,6 +43,9 @@ const fragmentShaderSource = `
 
 varying vec3 vNormal;
 varying vec3 vPosition;
+varying vec2 vTexCoord;
+varying vec3 vTangent;
+varying vec3 vBitangent;
 
 uniform vec3 lightPosition;
 uniform vec3 ambientColor;
@@ -36,9 +53,30 @@ uniform vec3 diffuseColor;
 uniform vec3 specularColor;
 uniform float shininess;
 
+uniform sampler2D diffuseMap;
+uniform sampler2D specularMap;
+uniform sampler2D normalMap;
+
 void main() {
-    // Normalize the interpolated normal
-    vec3 N = normalize(vNormal);
+    // Sample textures
+    vec3 diffuseTexture = texture2D(diffuseMap, vTexCoord).rgb;
+    float roughnessTexture = texture2D(specularMap, vTexCoord).r;
+    // Convert roughness to specular (invert: specular = 1 - roughness)
+    float specularTexture = 1.0 - roughnessTexture;
+    vec3 normalMapSample = texture2D(normalMap, vTexCoord).rgb;
+
+    // Transform normal from [0,1] to [-1,1]
+    vec3 tangentSpaceNormal = normalMapSample * 2.0 - 1.0;
+
+    // Construct TBN matrix (tangent space to view space)
+    mat3 TBN = mat3(
+        normalize(vTangent),
+        normalize(vBitangent),
+        normalize(vNormal)
+    );
+
+    // Transform normal from tangent space to view space
+    vec3 N = normalize(TBN * tangentSpaceNormal);
 
     // Calculate light direction
     vec3 L = normalize(lightPosition - vPosition);
@@ -49,16 +87,16 @@ void main() {
     // Calculate reflection direction
     vec3 R = reflect(-L, N);
 
-    // Ambient component
-    vec3 ambient = ambientColor;
+    // Ambient component (modulated by diffuse texture)
+    vec3 ambient = ambientColor * diffuseTexture;
 
-    // Diffuse component
+    // Diffuse component (modulated by diffuse texture)
     float diffuseIntensity = max(dot(N, L), 0.0);
-    vec3 diffuse = diffuseColor * diffuseIntensity;
+    vec3 diffuse = diffuseColor * diffuseTexture * diffuseIntensity;
 
-    // Specular component (Phong)
+    // Specular component (modulated by specular texture)
     float specularIntensity = pow(max(dot(R, V), 0.0), shininess);
-    vec3 specular = specularColor * specularIntensity;
+    vec3 specular = specularColor * specularTexture * specularIntensity;
 
     // Combine all components
     vec3 finalColor = ambient + diffuse + specular;
