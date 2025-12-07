@@ -3,14 +3,23 @@
 // Vertex shader
 const vertexShaderSource = `
 attribute vec3 vertex;
+attribute vec3 normal;
 uniform mat4 ModelViewProjectionMatrix;
+uniform mat4 ModelViewMatrix;
+uniform mat4 NormalMatrix;
+
+varying vec3 vNormal;
+varying vec3 vPosition;
 
 void main() {
-    gl_Position = ModelViewProjectionMatrix * vec4(vertex,1.0);
+    vec4 position = ModelViewMatrix * vec4(vertex, 1.0);
+    vPosition = position.xyz;
+    vNormal = normalize((NormalMatrix * vec4(normal, 0.0)).xyz);
+    gl_Position = ModelViewProjectionMatrix * vec4(vertex, 1.0);
 }`;
 
 
-// Fragment shader
+// Fragment shader - Phong Shading
 const fragmentShaderSource = `
 #ifdef GL_FRAGMENT_PRECISION_HIGH
    precision highp float;
@@ -18,7 +27,41 @@ const fragmentShaderSource = `
    precision mediump float;
 #endif
 
-uniform vec4 color;
+varying vec3 vNormal;
+varying vec3 vPosition;
+
+uniform vec3 lightPosition;
+uniform vec3 ambientColor;
+uniform vec3 diffuseColor;
+uniform vec3 specularColor;
+uniform float shininess;
+
 void main() {
-    gl_FragColor = color;
+    // Normalize the interpolated normal
+    vec3 N = normalize(vNormal);
+
+    // Calculate light direction
+    vec3 L = normalize(lightPosition - vPosition);
+
+    // Calculate view direction (assuming camera at origin in view space)
+    vec3 V = normalize(-vPosition);
+
+    // Calculate reflection direction
+    vec3 R = reflect(-L, N);
+
+    // Ambient component
+    vec3 ambient = ambientColor;
+
+    // Diffuse component
+    float diffuseIntensity = max(dot(N, L), 0.0);
+    vec3 diffuse = diffuseColor * diffuseIntensity;
+
+    // Specular component (Phong)
+    float specularIntensity = pow(max(dot(R, V), 0.0), shininess);
+    vec3 specular = specularColor * specularIntensity;
+
+    // Combine all components
+    vec3 finalColor = ambient + diffuse + specular;
+
+    gl_FragColor = vec4(finalColor, 1.0);
 }`;
