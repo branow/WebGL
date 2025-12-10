@@ -2,18 +2,34 @@
 <html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 
-<title>PA#3</title>
+<title>PA#3 - Parametric Surface with Texture Mapping</title>
 <style>
     body {
         background-color: #EEEEEE;
+        font-family: Arial, sans-serif;
     }
 </style>
 
+<!-- Utility Libraries -->
 <script src="./Utils/trackball-rotator.js"></script>
 <script src="./Utils/m4.js"></script>
-<script src="./shader.gpu"></script>
-<script src="./lab1.js"></script>
-<script src="./main.js"></script>
+
+<!-- Core Modules -->
+<script src="./src/config/surfaceConfig.js"></script>
+<script src="./src/core/SurfaceMath.js"></script>
+<script src="./src/core/TextureManager.js"></script>
+<script src="./src/core/Renderer.js"></script>
+
+<!-- Shader Loader -->
+<script src="./src/shaders/ShaderLoader.js"></script>
+
+<!-- Model Classes -->
+<script src="./src/models/BaseModel.js"></script>
+<script src="./src/models/ParametricSurface.js"></script>
+<script src="./src/models/SphereModel.js"></script>
+
+<!-- Main Application -->
+<script src="./src/Application.js"></script>
 
 </head>
 <body onload="init()">
