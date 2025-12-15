@@ -20,6 +20,9 @@ uniform sampler2D diffuseMap;
 uniform sampler2D specularMap;
 uniform sampler2D normalMap;
 
+uniform bool showRotationCenter;
+uniform vec2 rotationCenter;
+
 void main() {
     // Sample textures
     vec3 diffuseTexture = texture2D(diffuseMap, vTexCoord).rgb;
@@ -63,6 +66,18 @@ void main() {
 
     // Combine all components
     vec3 finalColor = ambient + diffuse + specular;
+
+    // Draw rotation center point if enabled
+    if (showRotationCenter) {
+        float dotRadius = 0.02;
+        float distance = length(vTexCoord - rotationCenter);
+
+        if (distance < dotRadius) {
+            float intensity = smoothstep(dotRadius, dotRadius * 0.5, distance);
+            vec3 dotColor = vec3(1.0, 0.0, 0.0);
+            finalColor = mix(finalColor, dotColor, intensity);
+        }
+    }
 
     gl_FragColor = vec4(finalColor, 1.0);
 }

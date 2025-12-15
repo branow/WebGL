@@ -12,8 +12,8 @@ const SurfaceConfig = {
     f: 0,
 
     // Default mesh density
-    defaultRSteps: 10,
-    defaultUSteps: 40,
+    defaultRSteps: 50,
+    defaultUSteps: 100,
 
     // Parameter ranges
     rRange: { min: 0, get max() { return SurfaceConfig.b; } },

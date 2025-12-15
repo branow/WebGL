@@ -10,6 +10,9 @@ class Renderer {
         this.models = new Map();
         this.animationId = null;
         this.lightAngle = 0;
+        this.textureRotationAngle = 0;
+        this.rotationCenter = [0.5, 0.5];
+        this.showRotationCenter = true;
     }
 
     /**
@@ -45,7 +48,11 @@ class Renderer {
             // Uniforms - Textures
             iDiffuseMap: this.gl.getUniformLocation(program, "diffuseMap"),
             iSpecularMap: this.gl.getUniformLocation(program, "specularMap"),
-            iNormalMap: this.gl.getUniformLocation(program, "normalMap")
+            iNormalMap: this.gl.getUniformLocation(program, "normalMap"),
+            // Uniforms - Texture Rotation
+            iTextureRotationAngle: this.gl.getUniformLocation(program, "textureRotationAngle"),
+            iRotationCenter: this.gl.getUniformLocation(program, "rotationCenter"),
+            iShowRotationCenter: this.gl.getUniformLocation(program, "showRotationCenter")
         };
     }
 
@@ -131,6 +138,11 @@ class Renderer {
         this.gl.uniform3fv(sp.iDiffuseColor, [1.5, 1.5, 1.5]);
         this.gl.uniform3fv(sp.iSpecularColor, [1.0, 1.0, 1.0]);
         this.gl.uniform1f(sp.iShininess, 16.0);
+
+        // Texture rotation
+        this.gl.uniform1f(sp.iTextureRotationAngle, this.textureRotationAngle);
+        this.gl.uniform2fv(sp.iRotationCenter, this.rotationCenter);
+        this.gl.uniform1i(sp.iShowRotationCenter, this.showRotationCenter ? 1 : 0);
     }
 
     /**
@@ -212,5 +224,26 @@ class Renderer {
         this.stopAnimation();
         this.textureManager.cleanup();
         this.models.clear();
+    }
+
+    /**
+     * Set texture rotation angle (in radians)
+     */
+    setTextureRotationAngle(angleInDegrees) {
+        this.textureRotationAngle = angleInDegrees * Math.PI / 180;
+    }
+
+    /**
+     * Set rotation center point (normalized coordinates 0-1)
+     */
+    setRotationCenter(x, y) {
+        this.rotationCenter = [x, y];
+    }
+
+    /**
+     * Set whether to show the rotation center point
+     */
+    setShowRotationCenter(show) {
+        this.showRotationCenter = show;
     }
 }

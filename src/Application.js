@@ -81,13 +81,70 @@ class Application {
     }
 
     /**
+     * Set up keyboard controls for moving rotation center
+     */
+    setupKeyboardControls() {
+        const moveStep = 0.01;
+
+        document.addEventListener('keydown', (event) => {
+            let moved = false;
+            const currentR = this.renderer.rotationCenter[0];
+            const currentV = this.renderer.rotationCenter[1];
+            let newR = currentR;
+            let newV = currentV;
+
+            switch(event.key.toLowerCase()) {
+                case 'a':
+                    newV = Math.max(0, currentV - moveStep);
+                    moved = true;
+                    break;
+                case 'd':
+                    newV = Math.min(1, currentV + moveStep);
+                    moved = true;
+                    break;
+                case 'w':
+                    newR = Math.min(1, currentR + moveStep);
+                    moved = true;
+                    break;
+                case 's':
+                    newR = Math.max(0, currentR - moveStep);
+                    moved = true;
+                    break;
+            }
+
+            if (moved) {
+                event.preventDefault();
+                this.renderer.setRotationCenter(newR, newV);
+
+                const rotationCenterRSlider = document.getElementById("rotationCenterRSlider");
+                const rotationCenterVSlider = document.getElementById("rotationCenterVSlider");
+                const rotationCenterRValue = document.getElementById("rotationCenterRValue");
+                const rotationCenterVValue = document.getElementById("rotationCenterVValue");
+
+                if (rotationCenterRSlider && rotationCenterRValue) {
+                    rotationCenterRSlider.value = newR * 100;
+                    rotationCenterRValue.textContent = newR.toFixed(2);
+                }
+
+                if (rotationCenterVSlider && rotationCenterVValue) {
+                    rotationCenterVSlider.value = newV * 100;
+                    rotationCenterVValue.textContent = newV.toFixed(2);
+                }
+
+                this.draw();
+            }
+        });
+    }
+
+    /**
      * Set up UI controls
      */
     setupUIControls() {
+        // Mesh density controls
         const rStepsSlider = document.getElementById("rStepsSlider");
-        const uStepsSlider = document.getElementById("uStepsSlider");
+        const vStepsSlider = document.getElementById("vStepsSlider");
         const rStepsValue = document.getElementById("rStepsValue");
-        const uStepsValue = document.getElementById("uStepsValue");
+        const vStepsValue = document.getElementById("vStepsValue");
 
         if (rStepsSlider && rStepsValue) {
             rStepsSlider.addEventListener("input", () => {
@@ -100,14 +157,57 @@ class Application {
             });
         }
 
-        if (uStepsSlider && uStepsValue) {
-            uStepsSlider.addEventListener("input", () => {
-                uStepsValue.textContent = uStepsSlider.value;
+        if (vStepsSlider && vStepsValue) {
+            vStepsSlider.addEventListener("input", () => {
+                vStepsValue.textContent = vStepsSlider.value;
                 const surface = this.renderer.getModel('surface');
                 if (surface) {
-                    surface.updateMeshDensity(undefined, parseInt(uStepsSlider.value));
+                    surface.updateMeshDensity(undefined, parseInt(vStepsSlider.value));
                     this.draw();
                 }
+            });
+        }
+
+        const textureRotationSlider = document.getElementById("textureRotationSlider");
+        const textureRotationValue = document.getElementById("textureRotationValue");
+        const rotationCenterRSlider = document.getElementById("rotationCenterRSlider");
+        const rotationCenterRValue = document.getElementById("rotationCenterRValue");
+        const rotationCenterVSlider = document.getElementById("rotationCenterVSlider");
+        const rotationCenterVValue = document.getElementById("rotationCenterVValue");
+
+        if (textureRotationSlider && textureRotationValue) {
+            textureRotationSlider.addEventListener("input", () => {
+                textureRotationValue.textContent = textureRotationSlider.value;
+                this.renderer.setTextureRotationAngle(parseFloat(textureRotationSlider.value));
+                this.draw();
+            });
+        }
+
+        if (rotationCenterRSlider && rotationCenterRValue) {
+            rotationCenterRSlider.addEventListener("input", () => {
+                const r = parseFloat(rotationCenterRSlider.value) / 100;
+                rotationCenterRValue.textContent = r.toFixed(2);
+                const currentV = this.renderer.rotationCenter[1];
+                this.renderer.setRotationCenter(r, currentV);
+                this.draw();
+            });
+        }
+
+        if (rotationCenterVSlider && rotationCenterVValue) {
+            rotationCenterVSlider.addEventListener("input", () => {
+                const v = parseFloat(rotationCenterVSlider.value) / 100;
+                rotationCenterVValue.textContent = v.toFixed(2);
+                const currentR = this.renderer.rotationCenter[0];
+                this.renderer.setRotationCenter(currentR, v);
+                this.draw();
+            });
+        }
+
+        const showRotationCenterCheckbox = document.getElementById("showRotationCenterCheckbox");
+        if (showRotationCenterCheckbox) {
+            showRotationCenterCheckbox.addEventListener("change", () => {
+                this.renderer.setShowRotationCenter(showRotationCenterCheckbox.checked);
+                this.draw();
             });
         }
     }
@@ -148,6 +248,7 @@ class Application {
             // Set up interaction
             this.setupTrackball();
             this.setupUIControls();
+            this.setupKeyboardControls();
 
             // Start rendering
             this.startAnimation();

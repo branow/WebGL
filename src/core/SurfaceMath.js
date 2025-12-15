@@ -108,29 +108,35 @@ class SurfaceMath {
     }
 
     /**
-     * Apply Gram-Schmidt orthogonalization to tangent and bitangent
-     * Tangent has priority and remains unchanged
+     * Apply Gram-Schmidt orthogonalization to create orthonormal tangent space
+     * Normal has priority and remains unchanged
+     * Tangent is orthogonalized with respect to normal
+     * Bitangent is calculated as cross product of normal and tangent
      * @param {object} T - Tangent vector
-     * @param {object} B - Bitangent vector
+     * @param {object} N - Normal vector
      * @returns {{tangent: object, bitangent: object}} Orthogonalized vectors
      */
-    static orthogonalizeTangentSpace(T, B) {
-        // Normalize tangent (tangent has priority)
-        const T_ortho = this.normalize(T);
+    static orthogonalizeTangentSpace(T, N) {
+        // Normalize normal (normal has priority)
+        const N_normalized = this.normalize(N);
 
-        // Orthogonalize bitangent with respect to tangent
-        // B' = B - (B·T)T
-        const dotBT = this.dot(B, T_ortho);
+        // Orthogonalize tangent with respect to normal using Gram-Schmidt
+        // T' = T - (T·N)N
+        const dotTN = this.dot(T, N_normalized);
         const projection = {
-            x: T_ortho.x * dotBT,
-            y: T_ortho.y * dotBT,
-            z: T_ortho.z * dotBT
+            x: N_normalized.x * dotTN,
+            y: N_normalized.y * dotTN,
+            z: N_normalized.z * dotTN
         };
-        const B_ortho = this.subtract(B, projection);
+        const T_ortho = this.subtract(T, projection);
+        const T_normalized = this.normalize(T_ortho);
+
+        // Calculate bitangent as cross product: B = N × T
+        const B_ortho = this.crossProduct(N_normalized, T_normalized);
         const B_normalized = this.normalize(B_ortho);
 
         return {
-            tangent: T_ortho,
+            tangent: T_normalized,
             bitangent: B_normalized
         };
     }

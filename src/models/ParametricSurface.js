@@ -32,16 +32,17 @@ class ParametricSurface extends BaseModel {
         const vertices = this.generateVertices();
         const normals = this.generateNormals();
         const uvs = this.generateUVs();
-        const tangents = this.generateTangents();
-        const bitangents = this.generateBitangents();
+
+        const tangentSpace = this.generateTangentSpace(normals);
+
         const indices = this.generateIndices();
 
         // Buffer all data to GPU
         this.bufferData(this.vertexBuffer, vertices, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
         this.bufferData(this.normalBuffer, normals, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
         this.bufferData(this.uvBuffer, uvs, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
-        this.bufferData(this.tangentBuffer, tangents, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
-        this.bufferData(this.bitangentBuffer, bitangents, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
+        this.bufferData(this.tangentBuffer, tangentSpace.tangents, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
+        this.bufferData(this.bitangentBuffer, tangentSpace.bitangents, this.gl.ARRAY_BUFFER, this.gl.STREAM_DRAW);
         this.bufferData(this.indexBuffer, indices, this.gl.ELEMENT_ARRAY_BUFFER, this.gl.STATIC_DRAW);
 
         this.count = indices.length;
@@ -84,47 +85,46 @@ class ParametricSurface extends BaseModel {
     }
 
     /**
-     * Generate tangent vectors
+     * Generate tangent space vectors (tangent and bitangent) with proper Gram-Schmidt orthogonalization
+     * Tangent is orthogonalized with respect to normal
+     * Bitangent is calculated as cross product of normal and tangent
+     * @param {Float32Array} normalsArray - Pre-calculated normals
+     * @returns {{tangents: Float32Array, bitangents: Float32Array}} Orthogonalized tangent space
      */
-    generateTangents() {
+    generateTangentSpace(normalsArray) {
         const tangents = [];
-        const { rRange, uRange } = this.config;
-
-        for (let i = 0; i <= this.rSteps; i++) {
-            const r = rRange.min + (rRange.max - rRange.min) * (i / this.rSteps);
-            for (let j = 0; j <= this.uSteps; j++) {
-                const u = uRange.min + (uRange.max - uRange.min) * (j / this.uSteps);
-                const tangent = SurfaceMath.surfaceTangent(r, u);
-                const normalized = SurfaceMath.normalize(tangent);
-                tangents.push(normalized.x, normalized.y, normalized.z);
-            }
-        }
-
-        return new Float32Array(tangents);
-    }
-
-    /**
-     * Generate bitangent vectors with Gram-Schmidt orthogonalization
-     */
-    generateBitangents() {
         const bitangents = [];
         const { rRange, uRange } = this.config;
 
+        let normalIndex = 0;
         for (let i = 0; i <= this.rSteps; i++) {
             const r = rRange.min + (rRange.max - rRange.min) * (i / this.rSteps);
             for (let j = 0; j <= this.uSteps; j++) {
                 const u = uRange.min + (uRange.max - uRange.min) * (j / this.uSteps);
 
+                // Get the tangent vector (∂P/∂u)
                 const T = SurfaceMath.surfaceTangent(r, u);
-                const B = SurfaceMath.surfaceBitangent(r, u, this.config);
+
+                const N = {
+                    x: normalsArray[normalIndex * 3],
+                    y: normalsArray[normalIndex * 3 + 1],
+                    z: normalsArray[normalIndex * 3 + 2]
+                };
 
                 // Apply Gram-Schmidt orthogonalization
-                const { bitangent } = SurfaceMath.orthogonalizeTangentSpace(T, B);
+                const { tangent, bitangent } = SurfaceMath.orthogonalizeTangentSpace(T, N);
+
+                tangents.push(tangent.x, tangent.y, tangent.z);
                 bitangents.push(bitangent.x, bitangent.y, bitangent.z);
+
+                normalIndex++;
             }
         }
 
-        return new Float32Array(bitangents);
+        return {
+            tangents: new Float32Array(tangents),
+            bitangents: new Float32Array(bitangents)
+        };
     }
 
     /**
